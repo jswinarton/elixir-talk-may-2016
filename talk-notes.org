@@ -1,0 +1,245 @@
+* Elixir Talk, 2016-05-14
+** Concurrency intro
+*** Disclaimer:
+- Concurrency is a huge problem domain
+- I'll be glossing over a lot of stuff here
+- Not everything I'm about to tell you is 100% true
+
+*** Where more than one thing happens at a time
+- Has a reputation for being difficult
+- The majority of programmers work with linear problems
+  + For example, Rails
+  + Request to response
+  + Web server handles concurrency for us
+  + Even that concurrency is easier bc no shared memory
+- Concurrency a specialized domain
+
+*** So why is it hard?
+- Multiple active threads of control share memory
+  + When multiple things try to modify the same object, shit gets weird
+  + Race conditions, deadlocks
+- Non-determinism
+  + Programs run differently each time you run them
+- Default: threads and locks
+  + v. low-level
+  + Programmer is responsible for managing threads safely
+  + Easy to shoot yourself in the foot
+
+*** Why do we care?
+- Concurrency is a hot topic as of late
+- The reason is because of a fundamental shift in hardware manufacturing
+- In the old days your computer had a single core processor
+- Every year better processors would come out and your computer gets faster
+- Unfortunately, hardware manufacturers have starting hitting physical limits
+- Single-core CPUs are capped out
+- Multi-core renaissance
+
+*** Concurrency is the new norm
+- [ slide 1: quote ]
+- We need sensible ways to reason about concurrency
+- Which is why Elixir is so exciting!
+
+** Erlang history (short! a minute and a half)
+
+*** Elixir builds atop an older language called Erlang
+- Erlang invented by engineers working on telephone switches for Ericsson
+
+*** It had to be:
+- Parallel as all hell
+- Long-running (ideally forever)
+- Redundant and fault-tolerant (i.e. the whole system can't crash if one
+  component does)
+- Zero downtime (your phone call can't drop whenever the devs release a
+  new build)
+
+*** Erlang is:
+- 30 years old
+- functional, actor-like
+- Derived from prolog
+- Open sourced in the '90s
+- Since then, it's been used to build massively parallel apps like
+  Whatsapp. Whatsapp has 1 billion users and is maintained by less than
+  50 engineers
+- "Weird" syntax. Because Prolog.
+  + Most languages we use are in some way derived from C
+  + Limited: not a lot of syntactic sugar, lots of boilerplate
+- Elixir is conceptually the same as Erlang
+  + Brainchild of José Valim, a core rails developer
+  + Modern, Ruby-like syntax
+  + Compiles to Erlang bytecode and runs on the Erlang (BEAM) VM
+  + Excellent tooling (mix, docs)
+  + All features of Erlang, including all Erlang libraries, available
+- Most of the concepts I'm describing today are Erlang concepts
+
+** Elixir + Concurrency
+
+*** Concurrency with combination of two paradigms
+- functional + actor-like (which Erlang/Elixir calls "processes")
+
+*** Processes
+- [ Slide: process 1 ]
+  + Processes are comuptational entities that execute asynchronously, sort
+    of like threads
+  + All code happens inside processes
+
+- [ Slide: process 2 ]
+  + Processes can spawn more processes
+  + Child processes can themselves spawn more processes
+
+- [ Slide: process 3 ]
+  + Can send and receive messages from each other
+  + Each process has a "mailbox" that it stores messages in
+  + Processes read each message in sequence and execute behaviours in response
+  + Processes cannot modify internal state of other processes directly
+  + Processes are responsible for maintaining state
+
+- [ Slide: process 4 ]
+  + Processes can be linked
+  + A crash in one linked process crashes the next
+
+- [ Slide: process 5 ]
+  + In practice, all processes in Elixir are linked in a hierarchy
+  + Parent processes act as supervisors that determine what happens if a
+  + child process fails
+  + "Let it crash" philosophy
+    - Elixir provides Supervisors which can restart crashed processes
+    - Erlang "let it crash" philosophy: you cannot rescue every error
+    - Nearly impossible to write perfect code
+    - Hardware crashes are a constant, esp. in long-running, distributed apps
+    - Instead: log it, restart it, and provide code hot-swapping utilities
+    - Code becomes MUCH clearer without all the error rescuing
+    - Allows for 99.999999% uptime
+    - More on this in other talks, hooray
+
+*** Functional programming
+- A programming paradigm. OO is also a paradigm.
+- Like OO, difficult to grok without hands-on experience
+- Functional places emphasis on data transformation, not state manipulation
+- Purely functional languages have NO mutable state
+  + As I alluded to earlier, a lot of the problems with concurrency and
+    memory management have to do with multiple threads mutating the same
+    object.
+  + Impossible to write over the same object at the same memory address
+  + You can reassign a variable, but the old variable will be removed from
+    scope at the same time
+  + No mutable state = implicit thread safety
+- Consider Ruby without mutable state
+  + Can't update a list in place
+  + Can't add or remove items from a hash
+- In addition, Elixir is NOT object oriented, which means ... no objects.
+  Beginners coming from OO think it's impossible to write non-trivial
+  programs
+- Solving problems in functional is possible, just requires a lot of recursion
+  + map
+  + reduce
+  + sort
+  + filter
+- [ slide: accumulators ]
+
+*** Functional/processes are what make Elixir:
+- Easily parallelizable
+- Highly available
+- Fault-tolerant
+
+** Elixir demos
+
+- [ slide: demo ]
+
+*** Everything is a process
+
+- [ Code =code:elixir:01_processes.exs= ]
+  + Processes are actors
+  + Non-deterministic order
+  + Parent process may exit early without receive block
+  + Crank it up to several hundred thousand?
+  + Green threads, not operating system threads
+  + Extremely lightweight
+  + Erlang VM: one thread per core
+  + I am running this code on a VM with one CPU: concurrent, not parallel
+  + Treat Elixir processes as you would objects in an OO language
+
+- [ Code =code:elixir:02_messages_a.exs= ]
+  + Processes can send messages to other processes
+  + Processes can respond to messages using the receive block
+  + A receive block waits indefinitely for a message
+  + The receive block only responds to one message, then exits
+  + Go back to demo 1 and activate the receive block !
+
+- [ Code =code:elixir:03_messages_b.exs= ]
+  + Use recursion to create an infinite receive loop
+  + Must be defined as a function, inside a module
+  + Aside: & notation
+  + Aside: documentation is cool! Markdown!
+
+- [ Code =code:elixir:04_messages_c.exs= ]
+  + Processes can conditionally respond to different types of messages
+  + Aside: receive blocks are just a special case of Elixir's `case` syntax
+  + Catch-all conditional block receives all messages and throws error
+  + spawn_link links processes together and crashes parent process on error
+
+- [ Code =code:elixir:05_message_queue.exs= ]
+  + Processes are non-blocking and act on messages in their own time
+  + Inspect the mailbox to show the message queue
+  + Erlang modules are available in Elixir!
+  + The pipe operator is kind like the unix pipe operator
+    - Passes the output to the first argument of the next function
+    - More on this later, but: highlights the functional nature of Elixir
+
+*** Pattern matching
+
+- The humble "=": match operator, not assignment
+  + [ iex: =x = 1= ]
+  + [ iex: =x= ]
+  + [ iex: =1 = x= ]
+    - This is a valid expression, since this is an expression, not assignment
+  + [ iex: =2 = x= ]
+    - This raises a match error, since the two sides aren't equal
+    - You can't assign from the right side, either
+  + [ iex: ={a, b, c} = {:hello, "world", 42}= ]
+    - This is a more useful way of pattern matching
+    - a, b and c are assigned to values from the right-hand tuple
+  + [ iex: ={a, b, c} = {:hello, "world"}= ]
+    - Fails because tuples aren't of the same length
+  + [ iex: =[head | tail] = [1, 2, 3]= ]
+    - You can match a list on its head and tail
+    - Extremely useful for recursion
+
+- Everything is pattern matched in Elixir!
+  + The messages in the receive blocks we just looked at are pattern matched
+  + Function definitions are themselves pattern matched
+  + [ code: =elixir:06_function_arity_a.exs= ]
+    - Most languages will give us some sort of argument error here
+    - Elixir gives us an "undefined function" error instead
+    - Concept of function arity
+  + [ code: =elixir:07_function_arify_b.exs= ]
+    - arity refers to the number of arguments passed to a function
+    - now we have =Math.sum/2= and =Math.sum/3=
+  + [ code: =elixir:08_guard_expressions.exs= ]
+    - notice that I've defined a function that explicitly accepts 0 as arg
+    - function arguments are also pattern matched!
+    - you can also attach guard expressions to functions
+    - this is often a great way to do type checking
+    - switch order of functions
+  + [ slide: accumulator + pattern matching ]
+    - you've seen this before
+    - now that we know pattern matching, we can write idiomatic elixir
+  + [ slide: excess conditionals ]
+    - I would consider this code to be hard to read, even though it's simple
+    - Looking at it makes me sad
+    - The elixir version is oh so much better
+
+** Conclusion
+- Installing it for yourself
+  + [ slide: brew install elixir ]
+- All of the code examples from this talk are available on Github
+  + [ slide: github URL ]
+- Next time:
+  + How processes manage state
+  + OTP (Open Telecom Platform)
+    - Supervisors
+    - Agents
+    - GenServers
+    - Tasks
+  + Mix
+  + Phoenix
+
